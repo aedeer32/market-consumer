@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS market_ticks (
+    id SERIAL PRIMARY KEY,
+    ts TIMESTAMP NOT NULL,
+    symbol TEXT NOT NULL,
+    price DOUBLE PRECISION NOT NULL
+);
