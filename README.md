@@ -1,38 +1,181 @@
 # market-consumer
 
-Kafka topic `prices` から JSON メッセージを読み取り、PostgreSQL の `market_ticks` テーブルへ insert する最小 Java consumer。
+A minimal Java Kafka consumer that reads JSON price events from a Kafka topic and inserts them into PostgreSQL.
 
-## 前提
+---
 
-- Java 17
+## Overview
+
+This application:
+
+- Consumes messages from Kafka topic `prices`
+- Parses JSON messages of the form:
+
+```json
+{"ts":"2026-03-20T11:00:00Z","symbol":"USDJPY","price":149.25}
+```
+
+- Inserts them into PostgreSQL table `market_ticks`
+
+---
+
+## Architecture
+
+Kafka (localhost:9092)
+        ↓
+market-consumer (Java)
+        ↓
+PostgreSQL (localhost:5433)
+
+---
+
+## Prerequisites
+
+Make sure you have the following installed:
+
+- Docker
+- Docker Compose
+- Java 17+
 - Maven
-- Kafka が `localhost:9092` で起動済み
-- PostgreSQL が `localhost:5433` で起動済み
-- DB: `appdb`
-- User: `appuser`
-- Password: `apppass`
+- Make
 
-## テーブル作成
+---
+
+## Quick Start (Recommended)
+
+### 1. Start infrastructure
 
 ```bash
-psql -h localhost -p 5433 -U appuser -d appdb -f scripts/create_table.sql
+make up
+```
+
+### 2. Wait until services are ready
+
+```bash
+make wait-db
+make wait-kafka
+```
+
+### 3. Initialize database
+
+```bash
+make init-db
+```
+
+### 4. Build the application
+
+```bash
+make build
+```
+
+### 5. Run the consumer
+
+```bash
+make run
 ```
 
 ---
 
-## 最初にやるコマンド
+## One-line setup (faster)
 
 ```bash
-psql -h localhost -p 5433 -U appuser -d appdb -f scripts/create_table.sql
-mvn clean test package
-java -jar target/market-consumer-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+make dev
+make run
 ```
 
-## 別ターミナルでKafkaに送信
+---
 
-```aiignore
-printf '{"ts":"2026-03-15T11:00:00Z","symbol":"USDJPY","price":149.25}\n{"ts":"2026-03-15T11:00:01Z","symbol":"USDJPY","price":149.27}\n' | \
-docker exec -i <KAFKA_CONTAINER_ID> /opt/kafka/bin/kafka-console-producer.sh \
---topic prices \
---bootstrap-server localhost:9092
+## Sending test data
+
+Open another terminal:
+
+```bash
+make kafka-producer
 ```
+
+Then input messages:
+
+```text
+{"ts":"2026-03-20T11:00:00Z","symbol":"USDJPY","price":149.25}
+{"ts":"2026-03-20T11:00:01Z","symbol":"USDJPY","price":149.27}
+```
+
+---
+
+## Verify data in PostgreSQL
+
+```bash
+make db-check
+```
+
+---
+
+## Available Make Commands
+
+```bash
+make help
+```
+
+---
+
+## Configuration
+
+| Component   | Value |
+|------------|------|
+| Kafka      | localhost:9092 |
+| PostgreSQL | localhost:5433 |
+| DB name    | appdb |
+| User       | appuser |
+| Password   | apppass |
+| Topic      | prices |
+
+---
+
+## Database Schema
+
+```sql
+CREATE TABLE IF NOT EXISTS market_ticks (
+  id SERIAL PRIMARY KEY,
+  ts TIMESTAMP NOT NULL,
+  symbol TEXT NOT NULL,
+  price DOUBLE PRECISION NOT NULL
+);
+```
+
+---
+
+## Troubleshooting
+
+### Kafka connection issue
+
+If you see logs like:
+
+Rebootstrapping with [localhost:9092]
+
+Kafka is not ready. Run:
+
+```bash
+make wait-kafka
+```
+
+---
+
+### PostgreSQL connection issue
+
+```bash
+make wait-db
+```
+
+---
+
+### Reset environment
+
+```bash
+make reset
+```
+
+---
+
+## License
+
+MIT
