@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    parameters {
+        booleanParam(name: 'ENABLE_DEPLOY', defaultValue: true, description: 'Deploy after a successful build on main.')
+        string(name: 'DEPLOY_HOST', defaultValue: 'host.docker.internal', description: 'Deployment target host reachable from the Jenkins container.')
+        string(name: 'DEPLOY_PORT', defaultValue: '22', description: 'SSH port on the deployment target host.')
+        string(name: 'DEPLOY_USER', defaultValue: 'pivot19', description: 'SSH user on the deployment target host.')
+        string(name: 'DEPLOY_BASE_DIR', defaultValue: '/opt/market-consumer', description: 'Base directory for releases on the deployment target host.')
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -9,10 +17,10 @@ pipeline {
 
     environment {
         APP_NAME = 'market-consumer'
-        DEPLOY_HOST = 'your-deploy-host'
-        DEPLOY_PORT = '22'
-        DEPLOY_USER = 'deploy'
-        DEPLOY_BASE_DIR = '/opt/market-consumer'
+        DEPLOY_HOST = "${params.DEPLOY_HOST}"
+        DEPLOY_PORT = "${params.DEPLOY_PORT}"
+        DEPLOY_USER = "${params.DEPLOY_USER}"
+        DEPLOY_BASE_DIR = "${params.DEPLOY_BASE_DIR}"
     }
 
     stages {
@@ -38,7 +46,10 @@ pipeline {
 
         stage('Deploy') {
             when {
-                branch 'main'
+                allOf {
+                    branch 'main'
+                    expression { params.ENABLE_DEPLOY }
+                }
             }
             steps {
                 sshagent(credentials: ['market-consumer-deploy-key']) {

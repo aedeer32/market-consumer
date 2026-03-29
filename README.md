@@ -136,6 +136,97 @@ Recommended Jenkins setup:
 - Move `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, and `DEPLOY_BASE_DIR` from inline defaults to folder-level environment variables or pipeline parameters before production use.
 - Use a Multibranch Pipeline so `main` deploys automatically and other branches only run build and verification.
 
+### Jenkins on WSL2 with Docker
+
+This repository now includes a Docker-based Jenkins setup for a WSL2 host:
+
+- Compose file: [`docker-compose.jenkins.yml`](/Users/pivot19/Development/market-consumer/docker-compose.jenkins.yml)
+- Jenkins image: [`jenkins/Dockerfile`](/Users/pivot19/Development/market-consumer/jenkins/Dockerfile)
+- Jenkins plugins: [`jenkins/plugins.txt`](/Users/pivot19/Development/market-consumer/jenkins/plugins.txt)
+
+The custom Jenkins image installs:
+
+- `git`
+- `maven`
+- `openssh-client`
+- `docker.io`
+- Jenkins plugins required for Pipeline, Git, and `sshagent`
+
+Default pipeline parameters are set for the WSL2 + Docker case:
+
+- `DEPLOY_HOST=host.docker.internal`
+- `DEPLOY_PORT=22`
+- `DEPLOY_USER=pivot19`
+- `DEPLOY_BASE_DIR=/opt/market-consumer`
+
+`host.docker.internal` is used because `localhost` inside the Jenkins container points to the container itself, not the WSL2 host.
+
+### WSL2 test procedure
+
+1. Start or enable SSH on the WSL2 host.
+
+```bash
+sudo service ssh start
+sudo ss -ltnp | grep ':22'
+```
+
+2. Prepare the deployment base directory on the WSL2 host.
+
+```bash
+sudo mkdir -p /opt/market-consumer/{bin,current,releases,shared/logs,shared/run}
+sudo chown -R $USER:$USER /opt/market-consumer
+```
+
+3. Create the deployment environment file on the WSL2 host.
+
+```bash
+cat >/opt/market-consumer/shared/app.env <<'EOF'
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_TOPIC=prices
+KAFKA_GROUP_ID=market-consumer-group
+POSTGRES_URL=jdbc:postgresql://localhost:5433/appdb
+POSTGRES_USER=appuser
+POSTGRES_PASSWORD=apppass
+JAVA_OPTS=-Xms256m -Xmx512m
+EOF
+```
+
+4. Make sure the Jenkins SSH public key is present in the WSL2 user's `authorized_keys`.
+
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+cat >>~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+5. Start Jenkins on the WSL2 host.
+
+```bash
+docker compose -f docker-compose.jenkins.yml up -d --build
+docker compose -f docker-compose.jenkins.yml logs -f
+```
+
+6. Open Jenkins at `http://localhost:8080`, install the initial admin user, and add the SSH private key credential with id `market-consumer-deploy-key`.
+
+7. Create a Pipeline job or Multibranch Pipeline that points to this repository and uses the checked-in [`Jenkinsfile`](/Users/pivot19/Development/market-consumer/Jenkinsfile).
+
+8. Run the pipeline with:
+
+- `ENABLE_DEPLOY=true`
+- `DEPLOY_HOST=host.docker.internal`
+- `DEPLOY_PORT=22`
+- `DEPLOY_USER=<your-wsl-user>`
+- `DEPLOY_BASE_DIR=/opt/market-consumer`
+
+9. Verify the deployed process on the WSL2 host.
+
+```bash
+ls -l /opt/market-consumer/current
+cat /opt/market-consumer/shared/run/market-consumer.pid
+tail -n 100 /opt/market-consumer/shared/logs/market-consumer.log
+```
+
 ### Target host directory layout
 
 The deployment target is expected to use a layout like this:

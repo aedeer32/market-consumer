@@ -1,0 +1,7 @@
+workflow-aggregator
+git
+github-branch-source
+credentials
+ssh-agent
+matrix-auth
+configuration-as-code
