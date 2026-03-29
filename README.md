@@ -219,6 +219,8 @@ docker compose -f docker-compose.jenkins.yml logs -f
 - `DEPLOY_USER=<your-wsl-user>`
 - `DEPLOY_BASE_DIR=/opt/market-consumer`
 
+For a regular `Pipeline` job using `Pipeline script from SCM`, deploy gating does not rely only on `BRANCH_NAME`. The checked-in [`Jenkinsfile`](/Users/pivot19/Development/market-consumer/Jenkinsfile) accepts `main`, `origin/main`, and other `/main` branch names from standard Git environment variables.
+
 9. Verify the deployed process on the WSL2 host.
 
 ```bash

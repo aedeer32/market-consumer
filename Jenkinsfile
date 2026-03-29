@@ -31,6 +31,15 @@ pipeline {
             }
         }
 
+        stage('Pipeline Context') {
+            steps {
+                echo "BRANCH_NAME=${env.BRANCH_NAME}"
+                echo "GIT_BRANCH=${env.GIT_BRANCH}"
+                echo "GIT_LOCAL_BRANCH=${env.GIT_LOCAL_BRANCH}"
+                echo "ENABLE_DEPLOY=${params.ENABLE_DEPLOY}"
+            }
+        }
+
         stage('Build & Verify') {
             steps {
                 // `verify` runs tests and Spotless check configured in pom.xml.
@@ -46,9 +55,20 @@ pipeline {
 
         stage('Deploy') {
             when {
-                allOf {
-                    branch 'main'
-                    expression { params.ENABLE_DEPLOY }
+                expression {
+                    if (!params.ENABLE_DEPLOY) {
+                        return false
+                    }
+
+                    def branchCandidates = [
+                        env.BRANCH_NAME,
+                        env.GIT_LOCAL_BRANCH,
+                        env.GIT_BRANCH
+                    ].findAll { it }
+
+                    return branchCandidates.any { branch ->
+                        branch == 'main' || branch == 'origin/main' || branch.endsWith('/main')
+                    }
                 }
             }
             steps {
