@@ -9,18 +9,10 @@ pipeline {
 
     environment {
         APP_NAME = 'market-consumer'
-        JAR_NAME = 'market-consumer-0.0.1-SNAPSHOT-jar-with-dependencies.jar'
-        JAR_PATH = "target/${JAR_NAME}"
-
-        DEPLOY_HOST = 'your-wsl-host'
+        DEPLOY_HOST = 'your-deploy-host'
         DEPLOY_PORT = '22'
-        DEPLOY_USER = 'pivot19'
+        DEPLOY_USER = 'deploy'
         DEPLOY_BASE_DIR = '/opt/market-consumer'
-    }
-
-    triggers {
-        // GitHub webhook を使うなら通常ここは不要
-        // pollSCM('H/5 * * * *')
     }
 
     stages {
@@ -31,49 +23,47 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+        stage('Build & Verify') {
             steps {
-                sh 'mvn -B clean test package'
+                // `verify` runs tests and Spotless check configured in pom.xml.
+                sh 'mvn -B clean verify'
             }
-        }
-
-        stage('Docker Build') {
-          steps {
-            sh 'docker build -t market-consumer:latest .'
-          }
         }
 
         stage('Archive Artifact') {
             steps {
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                archiveArtifacts artifacts: 'target/*-jar-with-dependencies.jar', fingerprint: true
             }
         }
 
-        stage('Deploy to WSL') {
+        stage('Deploy') {
             when {
                 branch 'main'
             }
             steps {
                 sshagent(credentials: ['market-consumer-deploy-key']) {
                     sh '''
-                        set -eux
+                        set -eu
 
                         COMMIT_SHA=$(cat .git-commit)
-                        BUILD_TAG_SAFE="${BUILD_NUMBER}-${COMMIT_SHA}"
-                        REMOTE_RELEASE_JAR="${DEPLOY_BASE_DIR}/releases/${APP_NAME}-${BUILD_TAG_SAFE}.jar"
+                        BUILD_TAG="${BUILD_NUMBER}-${COMMIT_SHA}"
+                        JAR_PATH=$(ls target/*-jar-with-dependencies.jar | head -n 1)
+                        JAR_FILE=$(basename "${JAR_PATH}")
+                        REMOTE_RELEASE_DIR="${DEPLOY_BASE_DIR}/releases/${BUILD_TAG}"
+                        REMOTE_JAR_PATH="${REMOTE_RELEASE_DIR}/${JAR_FILE}"
 
-                        ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} \
-                          "mkdir -p ${DEPLOY_BASE_DIR}/releases ${DEPLOY_BASE_DIR}/current ${DEPLOY_BASE_DIR}/shared/logs ${DEPLOY_BASE_DIR}/bin"
+                        ssh -p "${DEPLOY_PORT}" -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                          "mkdir -p '${REMOTE_RELEASE_DIR}' '${DEPLOY_BASE_DIR}/bin' '${DEPLOY_BASE_DIR}/shared'"
 
-                        scp -P ${DEPLOY_PORT} -o StrictHostKeyChecking=no ${JAR_PATH} \
-                          ${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_RELEASE_JAR}
+                        scp -P "${DEPLOY_PORT}" -o StrictHostKeyChecking=accept-new "${JAR_PATH}" \
+                          "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_JAR_PATH}"
 
-                        scp -P ${DEPLOY_PORT} -o StrictHostKeyChecking=no scripts/deploy.sh \
-                          ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_BASE_DIR}/bin/deploy.sh
+                        scp -P "${DEPLOY_PORT}" -o StrictHostKeyChecking=accept-new scripts/deploy.sh \
+                          "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_BASE_DIR}/bin/deploy.sh"
 
-                        ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} \
-                          "chmod +x ${DEPLOY_BASE_DIR}/bin/deploy.sh && \
-                           ${DEPLOY_BASE_DIR}/bin/deploy.sh ${DEPLOY_BASE_DIR} ${APP_NAME}-${BUILD_TAG_SAFE}.jar"
+                        ssh -p "${DEPLOY_PORT}" -o StrictHostKeyChecking=accept-new "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                          "chmod +x '${DEPLOY_BASE_DIR}/bin/deploy.sh' && \
+                           '${DEPLOY_BASE_DIR}/bin/deploy.sh' '${DEPLOY_BASE_DIR}' '${REMOTE_JAR_PATH}' '${APP_NAME}'"
                     '''
                 }
             }
@@ -81,14 +71,14 @@ pipeline {
     }
 
     post {
+        always {
+            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+        }
         success {
             echo 'Pipeline completed successfully.'
         }
         failure {
             echo 'Pipeline failed.'
-        }
-        always {
-            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
         }
     }
 }

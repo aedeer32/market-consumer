@@ -8,6 +8,7 @@ DB_PORT := 5433
 DB_NAME := appdb
 DB_USER := appuser
 DB_PASSWORD := apppass
+DB_CONTAINER := market-consumer-postgres
 
 KAFKA_BOOTSTRAP := localhost:9092
 KAFKA_TOPIC := prices
@@ -56,7 +57,7 @@ logs:
 
 wait-db:
 	@echo "Waiting for PostgreSQL on $(DB_HOST):$(DB_PORT)..."
-	@until pg_isready -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
+	@until docker exec $(DB_CONTAINER) pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
 		sleep 1; \
 	done
 	@echo "PostgreSQL is ready."
@@ -70,7 +71,7 @@ wait-kafka:
 	@echo "Kafka is ready."
 
 init-db:
-	psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f scripts/create_table.sql
+	docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) < scripts/create_table.sql
 
 build:
 	mvn clean test package
@@ -99,10 +100,10 @@ kafka-topic-list:
 		--list
 
 db-shell:
-	psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME)
+	docker exec -it $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME)
 
 db-check:
-	psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) \
+	docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) \
 		-c "SELECT * FROM market_ticks ORDER BY id DESC LIMIT 10;"
 
 consume-check:
